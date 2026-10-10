@@ -136,6 +136,54 @@ app.MapGet("/api/orders/by-user/{userId}", (ClothingShopDbContext ctx, int userI
 Results.Json(ctx.Orders.Where(o => o.UserId == userId).ToList()))
 .RequireAuthorization();
 
+app.MapPatch("/api/orders/{id}/status",
+async (ClothingShopDbContext ctx, int id, StatusRequest req) =>
+{
+    var order = await ctx.Orders.FindAsync(id);
+    if (order == null) return Results.NotFound(new { message = "Заказ не найден" });
+
+    order.Status = req.Status;
+    await ctx.SaveChangesAsync();
+    return Results.Ok(order);
+})
+.RequireAuthorization(p => p.RequireRole("Manager"));
+
+app.MapPatch("/api/sizes/{id}/quantity",
+async (ClothingShopDbContext ctx, int id, QuantityRequest req) =>
+{
+    var size = await ctx.Sizes.FindAsync(id);
+    if (size == null) return Results.NotFound(new { message = "Размер не найден" });
+
+    size.Quantity = req.Quantity;
+    await ctx.SaveChangesAsync();
+    return Results.Ok(size);
+})
+.RequireAuthorization(p => p.RequireRole("Manager"));
+
+app.MapPatch("/api/clothes/{id}/hide",
+async (ClothingShopDbContext ctx, int id) =>
+{
+    var cloth = await ctx.Clothes.FindAsync(id);
+    if (cloth == null) return Results.NotFound(new { message = "Товар не найден" });
+
+    cloth.IsAvailable = false;
+    await ctx.SaveChangesAsync();
+    return Results.Ok(cloth);
+})
+.RequireAuthorization(p => p.RequireRole("Manager"));
+
+app.MapPatch("/api/clothes/{id}/show",
+async (ClothingShopDbContext ctx, int id) =>
+{
+    var cloth = await ctx.Clothes.FindAsync(id);
+    if (cloth == null) return Results.NotFound(new { message = "Товар не найден" });
+
+    cloth.IsAvailable = true;
+    await ctx.SaveChangesAsync();
+    return Results.Ok(cloth);
+})
+.RequireAuthorization(p => p.RequireRole("Manager"));
+
 
 app.Run();
 
@@ -163,3 +211,5 @@ public record RegisterRequest(string Login, string Password, string Phone, strin
 
 public record OrderRequest(List<OrderItemRequest> Items);
 public record OrderItemRequest(int SizeId, int Quantity);
+public record StatusRequest(string Status);
+public record QuantityRequest(int Quantity);
