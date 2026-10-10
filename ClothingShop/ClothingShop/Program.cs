@@ -101,9 +101,40 @@ app.MapGet("/api/clothes", (ClothingShopDbContext ctx) =>
 app.MapGet("/api/clothes/search", (ClothingShopDbContext ctx, string q) =>
     Results.Json(ctx.Clothes.Where(c => c.Name.Contains(q)).ToList()));
 
+app.MapPost("/api/orders", async (ClothingShopDbContext ctx, ClaimsPrincipal principal, OrderRequest req) =>
+{
+    var userId = int.Parse(principal.FindFirst("sub")!.Value);
 
+    var order = new Order
+    {
+        UserId = userId,
+        CreatedAt = DateTime.UtcNow,
+        Status = "New"
+    };
+    ctx.Orders.Add(order);
+    await ctx.SaveChangesAsync();
 
+    foreach (var item in req.Items)
+    {
+        ctx.OrderItems.Add(new OrderItem
+        {
+            OrderId = order.Id,
+            SizeId = item.SizeId,
+            Quantity = item.Quantity
+        });
+    }
+    await ctx.SaveChangesAsync();
 
+    return Results.Created($"/api/orders/{order.Id}", new { order.Id, order.Status });
+}).RequireAuthorization();
+
+app.MapGet("/api/orders/by-status/{status}", (ClothingShopDbContext ctx, string status) =>
+Results.Json(ctx.Orders.Where(o => o.Status == status).ToList()))
+.RequireAuthorization();
+
+app.MapGet("/api/orders/by-user/{userId}", (ClothingShopDbContext ctx, int userId) =>
+Results.Json(ctx.Orders.Where(o => o.UserId == userId).ToList()))
+.RequireAuthorization();
 
 
 app.Run();
@@ -129,3 +160,6 @@ string CreateToken(User user)
 
 public record LoginRequest(string Login, string Password);
 public record RegisterRequest(string Login, string Password, string Phone, string Address);
+
+public record OrderRequest(List<OrderItemRequest> Items);
+public record OrderItemRequest(int SizeId, int Quantity);
