@@ -3,21 +3,15 @@
 using System;
 using System.Collections.Generic;
 
-namespace ClothingShop.Models;
+namespace ClothingShopDbContext.Models;
 
 public partial class Size
 {
     public int Id { get; set; }
 
-    public int ClothingId { get; set; }
+    public string LetterCode { get; set; }
 
-    public string Letter { get; set; }
+    public int NumericCode { get; set; }
 
-    public int Number { get; set; }
-
-    public int Quantity { get; set; }
-
-    public virtual Clothe Clothing { get; set; }
-
-    public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
+    public virtual ICollection<ClothingSize> ClothingSizes { get; set; } = new List<ClothingSize>();
 }

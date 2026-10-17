@@ -1,11 +1,14 @@
-using ClothingShop.Models;
+using ClothingShopDbContext;
+using ClothingShopDbContext.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.Json.Serialization;
+using ClothingShop;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,28 +17,32 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
 });
 
-builder.Services.AddDbContext<ClothingShopDbContext>();
+builder.Services.AddDbContext<ClothingShopDb>();
 
-var key = new SymmetricSecurityKey(RandomNumberGenerator.GetBytes(32));
+
+var key = new SymmetricSecurityKey(
+    RandomNumberGenerator.GetBytes(32));
+
 var validation = new TokenValidationParameters
-    {
-        ValidateIssuer = true,
-        ValidIssuer = "JwtDemo",
+{
+    ValidateIssuer = true,
+    ValidIssuer = "JwtDemo",
 
-        ValidateAudience = true,
-        ValidAudience = "JwtDemoApi",
+    ValidateAudience = true,
+    ValidAudience = "JwtDemoApi",
 
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = key,
+    ValidateIssuerSigningKey = true,
+    IssuerSigningKey = key,
 
-        ValidateLifetime = true,
-        ClockSkew = TimeSpan.Zero,
+    ValidateLifetime = true,
+    ClockSkew = TimeSpan.Zero,
 
-        NameClaimType = "name",
-        RoleClaimType = "role"
-    };
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    NameClaimType = "name",
+    RoleClaimType = "role"
+};
+ClothingShopDb context = new ClothingShopDb();
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.MapInboundClaims = false;
@@ -44,145 +51,265 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+var hasher = new PasswordHasher<User>();
+
+List<User> accounts = context.Users.ToList();
+
+
+foreach (var account in accounts)
+{
+    account.PasswordHash = hasher.HashPassword(account, account.PasswordHash);
+}
+
 var app = builder.Build();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-var hasher = new PasswordHasher<User>();
+app.MapGet("/api/closing", async (ClothingShopDb context) => Results.Json(context.Clothings));
 
-app.MapPost("/api/auth/register", async (ClothingShopDbContext ctx, RegisterRequest req) =>
+
+app.MapGet("/api/closing/{name}", async (ClothingShopDb context, string name) =>
 {
-    if (ctx.Users.Any(u => u.Login == req.Login))
-        return Results.BadRequest(new { message = "Логин уже занят" });
+    var Name = name.ToLower();
+    var Closing = await context.Clothings.Where(x => x.Name.ToLower().Contains(name)).ToListAsync();
+    if (Closing.Count == 0) return Results.NotFound(new { message = "Такой одежды нет" });
+    return Results.Json(Closing);
+});
 
-    var user = new User
-    {
-        Login = req.Login,
-        Phone = req.Phone,
-        Address = req.Address,
-        Role = "User"
-    };
-    user.PasswordHash = hasher.HashPassword(user, req.Password);
 
-    ctx.Users.Add(user);
-    await ctx.SaveChangesAsync();
-
-    return Results.Created($"/api/users/{user.Id}", new { user.Id, user.Login });
-}).AllowAnonymous();
-
-app.MapPost("/api/auth/login", (ClothingShopDbContext ctx, LoginRequest req) =>
-    {
-        var user = ctx.Users.FirstOrDefault(u => u.Login == req.Login);
-        if (user == null || string.IsNullOrWhiteSpace(req.Password))
-            return Results.Challenge();
-
-        var result = hasher.VerifyHashedPassword(user, user.PasswordHash, req.Password);
-        if (result == PasswordVerificationResult.Failed)
-            return Results.Challenge();
-
-        return Results.Ok(new
-        {
-            access_token = CreateToken(user),
-            token_type = "Bearer"
-        });
-    }).AllowAnonymous();
-
-app.MapGet("/api/me", (ClaimsPrincipal principal) =>
-    Results.Ok(new
-    {
-        login = principal.Identity?.Name,
-        role = principal.FindFirst("role")?.Value
-    })).RequireAuthorization();
-
-app.MapGet("/api/clothes", (ClothingShopDbContext ctx) =>
-    Results.Json(ctx.Clothes.ToList()));
-
-app.MapGet("/api/clothes/search", (ClothingShopDbContext ctx, string q) =>
-    Results.Json(ctx.Clothes.Where(c => c.Name.Contains(q)).ToList()));
-
-app.MapPost("/api/orders", async (ClothingShopDbContext ctx, ClaimsPrincipal principal, OrderRequest req) =>
+app.MapPost("/api/orders", async (ClothingShopDb context, CreateOrder co, ClaimsPrincipal user) =>
 {
-    var userId = int.Parse(principal.FindFirst("sub")!.Value);
-
-    var order = new Order
+    var neworder = new Order
     {
-        UserId = userId,
-        CreatedAt = DateTime.UtcNow,
-        Status = "New"
-    };
-    ctx.Orders.Add(order);
-    await ctx.SaveChangesAsync();
-
-    foreach (var item in req.Items)
-    {
-        ctx.OrderItems.Add(new OrderItem
+        CreatedAt = DateTime.Now,
+        StatusId = await context.OrderStatuses.Where(s => s.Name == "Создан").Select(s => s.Id).FirstAsync(),
+        UserId = Convert.ToInt32(user.FindFirst("sub").Value),
+        OrderItems = co.ItemsInOrder.Select(x => new OrderItem
         {
-            OrderId = order.Id,
-            SizeId = item.SizeId,
-            Quantity = item.Quantity
-        });
-    }
-    await ctx.SaveChangesAsync();
+            ClothingSizeId = x.ClothingSizeId,
+            Quantity = x.Quantity,
+            UnitPrice = x.UnitPrice
+        }).ToList()
+    };
 
-    return Results.Created($"/api/orders/{order.Id}", new { order.Id, order.Status });
+
+    context.Orders.Add(neworder);
+    await context.SaveChangesAsync();
+    return Results.Created($"/api/orders/{neworder.Id}", new
+    {
+        neworder.Id,
+        neworder.CreatedAt,
+        neworder.StatusId,
+        neworder.UserId,
+        Items = neworder.OrderItems.Select(i => new
+        {
+            i.Id,
+            i.ClothingSizeId,
+            i.Quantity,
+            i.UnitPrice
+        })
+    });
 }).RequireAuthorization();
 
-app.MapGet("/api/orders/by-status/{status}", (ClothingShopDbContext ctx, string status) =>
-Results.Json(ctx.Orders.Where(o => o.Status == status).ToList()))
-.RequireAuthorization();
 
-app.MapGet("/api/orders/by-user/{userId}", (ClothingShopDbContext ctx, int userId) =>
-Results.Json(ctx.Orders.Where(o => o.UserId == userId).ToList()))
-.RequireAuthorization();
+//Получает список заказов определённого статуса
 
-app.MapPatch("/api/orders/{id}/status",
-async (ClothingShopDbContext ctx, int id, StatusRequest req) =>
+app.MapGet("/api/orders/{statusId}", async (ClothingShopDb context, int statusId) =>
 {
-    var order = await ctx.Orders.FindAsync(id);
+    var orders = await context.Orders.Where(x => x.StatusId == statusId).Include(x => x.OrderItems).Select(x => new
+    {
+        x.Id,
+        x.CreatedAt,
+        x.StatusId,
+        x.UserId,
+        Items = x.OrderItems.Select(i => new
+        {
+            i.Id,
+            i.ClothingSizeId,
+            i.Quantity,
+            i.UnitPrice
+        })
+    }).ToListAsync();
+
+    return Results.Json(orders);
+}).RequireAuthorization();
+
+//Получает список заказов определённого покупателя
+
+app.MapGet("/api/orders/", async (ClothingShopDb context, ClaimsPrincipal user) =>
+{
+    var orders = await context.Orders
+        .Where(o => o.User.Login == user.Identity.Name)
+        .Include(o => o.OrderItems)
+        .Select(o => new
+        {
+            o.Id,
+            o.CreatedAt,
+            o.StatusId,
+            o.UserId,
+            Items = o.OrderItems.Select(i => new
+            {
+                i.Id,
+                i.ClothingSizeId,
+                i.Quantity,
+                i.UnitPrice
+            })
+        })
+        .ToListAsync();
+
+    return Results.Json(orders);
+}).RequireAuthorization();
+
+//Авторизация пользователя
+
+app.MapPost("/api/auth/login", async (ClothingShopDb context, LoginRequest request) =>
+{
+    var user = await context.Users.Include(a => a.Role).FirstOrDefaultAsync(a => a.Login == request.Login);
+
+    if (user == null || string.IsNullOrWhiteSpace(request.Password))
+        return Results.Challenge();
+
+    var result = hasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
+
+    if (result == PasswordVerificationResult.Failed)
+        return Results.Challenge();
+
+    return Results.Ok(new
+    {
+        access_token = CreateToken(user),
+        token_type = "Bearer"
+    });
+}).AllowAnonymous();
+
+//Регистрация пользователя
+
+app.MapPost("/api/reg/registr", async (ClothingShopDb context, RegRequest request) =>
+{
+    var user = await context.Users.FirstOrDefaultAsync(u => u.Login == request.Login);
+    if (user != null) return Results.NotFound(new { message = "Логин занят" });
+
+    var newuser = new User
+    {
+        Login = request.Login,
+        PasswordHash = request.Password,
+        Phone = request.Phone,
+        DeliveryAddress = request.Address,
+        RoleId = 2,
+        Role = context.Roles.FirstOrDefault(r => r.Id==2)
+
+    };
+    newuser.PasswordHash = hasher.HashPassword(newuser, request.Password);
+    await context.Users.AddAsync(newuser);
+    context.SaveChanges();
+    return Results.Created($"/api/users/{newuser.Id}", newuser);
+
+}).AllowAnonymous();
+
+//изменить статус существующего заказа
+
+app.MapPut("/api/orders/{id}/status", async (ClothingShopDb context, int id, UpdateOrderStat uos) =>
+{
+    var order = context.Orders.FirstOrDefault(o => o.Id == id);
     if (order == null) return Results.NotFound(new { message = "Заказ не найден" });
 
-    order.Status = req.Status;
-    await ctx.SaveChangesAsync();
-    return Results.Ok(order);
-})
-.RequireAuthorization(p => p.RequireRole("Manager"));
+    var statusExists = await context.OrderStatuses.AnyAsync(s => s.Id == uos.StatusId);
+    if (!statusExists)
+        return Results.BadRequest(new { message = "Такого статуса не существует" });
 
-app.MapPatch("/api/sizes/{id}/quantity",
-async (ClothingShopDbContext ctx, int id, QuantityRequest req) =>
+    order.StatusId = uos.StatusId;
+    await context.SaveChangesAsync();
+
+    return Results.Json(new
+    {
+        order.Id,
+        order.CreatedAt,
+        order.StatusId,
+        order.UserId
+    });
+}).RequireAuthorization(policy => policy.RequireAuthenticatedUser().RequireRole("Manager"));
+
+//app.MapGet("/hash", (ClothingShopDb context) =>
+//{
+//    foreach (var user in context.Users.ToList())
+//    {
+//        user.PasswordHash = hasher.HashPassword(user, user.PasswordHash);
+//    }
+
+//    context.SaveChanges();
+//    return Results.Ok(new
+//    {
+//        access_token = CreateToken(context.Users.First(i => i.Id == 1)),
+//        token_type = "Bearer"
+//    });
+//}).AllowAnonymous();
+
+//изменить количество товара определённого размера
+//order-items
+app.MapPut("/api/orderitems/{id}/quantity", async (ClothingShopDb context, int id, UpdateQuantity uq) =>
 {
-    var size = await ctx.Sizes.FindAsync(id);
-    if (size == null) return Results.NotFound(new { message = "Размер не найден" });
+    var item = await context.OrderItems.FirstOrDefaultAsync(i => i.Id == id);
+    if (item is null)
+        return Results.NotFound(new { message = "Позиция заказа не найдена" });
 
-    size.Quantity = req.Quantity;
-    await ctx.SaveChangesAsync();
-    return Results.Ok(size);
-})
-.RequireAuthorization(p => p.RequireRole("Manager"));
+    if (uq.Quantity <= 0)
+        return Results.BadRequest(new { message = "Количество должно быть больше 0" });
 
-app.MapPatch("/api/clothes/{id}/hide",
-async (ClothingShopDbContext ctx, int id) =>
+    item.Quantity = uq.Quantity;
+    await context.SaveChangesAsync();
+
+    return Results.Json(new
+    {
+        item.Id,
+        item.OrderId,
+        item.ClothingSizeId,
+        item.Quantity,
+        item.UnitPrice
+    });
+}).RequireAuthorization(policy => policy.RequireAuthenticatedUser().RequireRole("Manager"));
+
+//убрать товар из продажи
+
+app.MapDelete("/api/closing/{id}", async (ClothingShopDb context, int id, ClaimsPrincipal user) =>
 {
-    var cloth = await ctx.Clothes.FindAsync(id);
-    if (cloth == null) return Results.NotFound(new { message = "Товар не найден" });
+    var clothing = await context.Clothings.FirstOrDefaultAsync(c => c.Id == id);
+    if (clothing is null)
+        return Results.NotFound(new { message = "Товар не найден" });
 
-    cloth.IsAvailable = false;
-    await ctx.SaveChangesAsync();
-    return Results.Ok(cloth);
-})
-.RequireAuthorization(p => p.RequireRole("Manager"));
+    if (!clothing.IsAvailable)
+        return Results.BadRequest(new { message = "Товар уже снят с продажи" });
+    clothing.IsAvailable = false;
+    await context.SaveChangesAsync();
 
-app.MapPatch("/api/clothes/{id}/show",
-async (ClothingShopDbContext ctx, int id) =>
+    return Results.Json(new
+    {
+        clothing.Id,
+        clothing.Name,
+        clothing.IsAvailable
+    });
+}).RequireAuthorization(policy => policy.RequireAuthenticatedUser().RequireRole("Manager"));
+
+//вернуть товар в продажу;
+
+app.MapPut("/api/clothing/{id}/restore", async (ClothingShopDb context, int id) =>
 {
-    var cloth = await ctx.Clothes.FindAsync(id);
-    if (cloth == null) return Results.NotFound(new { message = "Товар не найден" });
+    var clothing = await context.Clothings.FirstOrDefaultAsync(c => c.Id == id);
+    if (clothing is null)
+        return Results.NotFound(new { message = "Товар не найден" });
 
-    cloth.IsAvailable = true;
-    await ctx.SaveChangesAsync();
-    return Results.Ok(cloth);
-})
-.RequireAuthorization(p => p.RequireRole("Manager"));
+    if (clothing.IsAvailable)
+        return Results.BadRequest(new { message = "Товар уже в продаже" });
+
+    clothing.IsAvailable = true;
+    await context.SaveChangesAsync();
+
+    return Results.Json(new
+    {
+        clothing.Id,
+        clothing.Name,
+        clothing.IsAvailable
+    });
+}).RequireAuthorization(policy => policy.RequireAuthenticatedUser().RequireRole("Manager"));
 
 
 app.Run();
@@ -193,23 +320,21 @@ string CreateToken(User user)
     {
         new Claim("sub", user.Id.ToString()),
         new Claim("name", user.Login),
-        new Claim("role", user.Role)
+        new Claim("role", user.Role.Name)
     };
 
     var token = new JwtSecurityToken(
         issuer: "JwtDemo",
         audience: "JwtDemoApi",
         claims: claims,
-        expires: DateTime.UtcNow.AddMinutes(60),
-        signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
+        expires: DateTime.UtcNow.AddMinutes(15),
+        signingCredentials: new SigningCredentials(
+            key, SecurityAlgorithms.HmacSha256));
 
     return new JwtSecurityTokenHandler().WriteToken(token);
 }
 
-public record LoginRequest(string Login, string Password);
-public record RegisterRequest(string Login, string Password, string Phone, string Address);
 
-public record OrderRequest(List<OrderItemRequest> Items);
-public record OrderItemRequest(int SizeId, int Quantity);
-public record StatusRequest(string Status);
-public record QuantityRequest(int Quantity);
+public record LoginRequest(string Login, string Password);
+public record RegRequest(string Login, string Password, string Phone, string Address);
+

@@ -1,5 +1,5 @@
 ﻿{
-   "CodeGenerationMode": 4,
+   "CodeGenerationMode": 5,
    "ContextClassName": "ClothingShopDbContext",
    "ContextNamespace": null,
    "FilterSchemas": false,
@@ -8,30 +8,46 @@
    "OutputContextPath": null,
    "OutputPath": "Models",
    "PreserveCasingWithRegex": true,
-   "ProjectRootNamespace": "ClothingShop",
+   "ProjectRootNamespace": "ClothingShopDbContext",
    "Schemas": null,
    "SelectedHandlebarsLanguage": 2,
    "SelectedToBeGenerated": 0,
    "T4TemplatePath": null,
    "Tables": [
       {
-         "Name": "[dbo].[Clothes]",
+         "Name": "[dbo].[clothing]",
          "ObjectType": 0
       },
       {
-         "Name": "[dbo].[OrderItems]",
+         "Name": "[dbo].[clothing_sizes]",
          "ObjectType": 0
       },
       {
-         "Name": "[dbo].[Orders]",
+         "Name": "[dbo].[clothing_types]",
          "ObjectType": 0
       },
       {
-         "Name": "[dbo].[Sizes]",
+         "Name": "[dbo].[order_items]",
          "ObjectType": 0
       },
       {
-         "Name": "[dbo].[Users]",
+         "Name": "[dbo].[order_statuses]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[orders]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[roles]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[sizes]",
+         "ObjectType": 0
+      },
+      {
+         "Name": "[dbo].[users]",
          "ObjectType": 0
       }
    ],

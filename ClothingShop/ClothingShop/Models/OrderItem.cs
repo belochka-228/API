@@ -3,7 +3,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ClothingShop.Models;
+namespace ClothingShopDbContext.Models;
 
 public partial class OrderItem
 {
@@ -11,11 +11,13 @@ public partial class OrderItem
 
     public int OrderId { get; set; }
 
-    public int SizeId { get; set; }
+    public int ClothingSizeId { get; set; }
 
     public int Quantity { get; set; }
 
-    public virtual Order Order { get; set; }
+    public decimal UnitPrice { get; set; }
 
-    public virtual Size Size { get; set; }
+    public virtual ClothingSize ClothingSize { get; set; }
+
+    public virtual Order Order { get; set; }
 }

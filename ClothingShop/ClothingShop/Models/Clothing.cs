@@ -3,9 +3,9 @@
 using System;
 using System.Collections.Generic;
 
-namespace ClothingShop.Models;
+namespace ClothingShopDbContext.Models;
 
-public partial class Clothe
+public partial class Clothing
 {
     public int Id { get; set; }
 
@@ -17,9 +17,11 @@ public partial class Clothe
 
     public int PurchaseCount { get; set; }
 
-    public string Type { get; set; }
+    public int TypeId { get; set; }
 
     public bool IsAvailable { get; set; }
 
-    public virtual ICollection<Size> Sizes { get; set; } = new List<Size>();
+    public virtual ICollection<ClothingSize> ClothingSizes { get; set; } = new List<ClothingSize>();
+
+    public virtual ClothingType Type { get; set; }
 }

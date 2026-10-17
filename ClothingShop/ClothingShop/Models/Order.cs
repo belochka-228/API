@@ -3,7 +3,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ClothingShop.Models;
+namespace ClothingShopDbContext.Models;
 
 public partial class Order
 {
@@ -11,11 +11,13 @@ public partial class Order
 
     public DateTime CreatedAt { get; set; }
 
-    public string Status { get; set; }
+    public int StatusId { get; set; }
 
     public int UserId { get; set; }
 
     public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
+
+    public virtual OrderStatus Status { get; set; }
 
     public virtual User User { get; set; }
 }

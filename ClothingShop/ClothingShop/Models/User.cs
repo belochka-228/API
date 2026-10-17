@@ -3,7 +3,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ClothingShop.Models;
+namespace ClothingShopDbContext.Models;
 
 public partial class User
 {
@@ -15,9 +15,11 @@ public partial class User
 
     public string Phone { get; set; }
 
-    public string Address { get; set; }
+    public string DeliveryAddress { get; set; }
 
-    public string Role { get; set; }
+    public int RoleId { get; set; }
 
     public virtual ICollection<Order> Orders { get; set; } = new List<Order>();
+
+    public virtual Role Role { get; set; }
 }
